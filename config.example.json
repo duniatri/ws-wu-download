@@ -1,0 +1,6 @@
+{
+  "api_key": "YOUR_API_KEY_HERE",
+  "station_id": "YOUR_STATION_ID",
+  "units": "m",
+  "numeric_precision": "decimal"
+}

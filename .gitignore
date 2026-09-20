@@ -1,0 +1,16 @@
+# --- Credentials: never commit these -----------------------------------------
+config.json
+
+# --- Generated output ---------------------------------------------------------
+*.xlsx
+*.xls
+trend_*.png
+weather_*.xlsx
+report_output/
+
+# --- R ------------------------------------------------------------------------
+.Rhistory
+.RData
+.Rproj.user
+.Rprofile
+*.Rproj
