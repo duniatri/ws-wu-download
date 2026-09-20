@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: R on Ubuntu
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: release
+          # Binary packages from Posit Package Manager -- installs in seconds
+          # instead of compiling from source.
+          use-public-rspm: true
+
+      # ragg needs libpng/libtiff/libjpeg/freetype/harfbuzz/fribidi;
+      # httr2 needs libcurl/libssl. These are not pulled in automatically.
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libcurl4-openssl-dev \
+            libssl-dev \
+            libxml2-dev \
+            libpng-dev \
+            libtiff-dev \
+            libjpeg-dev \
+            libfreetype6-dev \
+            libharfbuzz-dev \
+            libfribidi-dev
+
+      - name: Install R packages
+        run: |
+          install.packages(c(
+            # app
+            "shiny", "bslib", "plotly", "DT", "shinycssloaders",
+            # data handling
+            "dplyr", "tidyr", "tibble", "lubridate",
+            # api client
+            "httr2", "jsonlite",
+            # file i/o
+            "readxl", "writexl", "ragg",
+            # plotting
+            "ggplot2"
+          ))
+        shell: Rscript {0}
+
+      - name: Check R syntax
+        run: |
+          files <- c("app.R", "R/params.R", "R/api.R", "R/plot.R", "tests/smoke_test.R")
+          for (f in files) {
+            cat(sprintf("%-24s", f))
+            invisible(parse(f))
+            cat("OK\n")
+          }
+        shell: Rscript {0}
+
+      # No config.json in CI, so this runs the offline suite: parameter
+      # catalogue, plot building, xlsx/png export, interval helpers.
+      # Network sections are reported as SKIP, not silently passed.
+      - name: Smoke test
+        run: Rscript tests/smoke_test.R
+
+      - name: App starts and serves its UI
+        run: bash tests/app_boot_test.sh

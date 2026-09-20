@@ -1,5 +1,7 @@
 # ws-wu-download
 
+[![CI](https://github.com/duniatri/ws-wu-download/actions/workflows/ci.yml/badge.svg)](https://github.com/duniatri/ws-wu-download/actions/workflows/ci.yml)
+
 An R Shiny app for **fetching, exploring and exporting data from a personal
 weather station** published to Weather Underground, using The Weather Company
 PWS API v2.
@@ -168,7 +170,11 @@ ws-wu-download/
 │   ├── api.R              API client, JSON flattening, fetch orchestration
 │   └── plot.R             ggplot builder + PNG export
 ├── tests/
-│   └── smoke_test.R       functional test, runs with or without credentials
+│   ├── smoke_test.R       functional test, runs with or without credentials
+│   └── app_boot_test.sh   verifies the app starts and serves its UI
+├── .github/
+│   └── workflows/
+│       └── ci.yml         CI: syntax check, smoke test, app boot
 ├── docs/
 │   ├── INSTALL.md         installation and troubleshooting
 │   ├── API-REFERENCE.md   endpoint and field reference
@@ -182,10 +188,11 @@ ws-wu-download/
 ## Testing
 
 ```bash
-Rscript tests/smoke_test.R
+Rscript tests/smoke_test.R      # functional test
+bash tests/app_boot_test.sh     # app starts and serves its UI
 ```
 
-The suite runs in two modes:
+The smoke suite runs in two modes:
 
 - **With credentials** in `config.json` — the full suite, including live API
   calls (68 assertions).
@@ -195,6 +202,19 @@ The suite runs in two modes:
 
 That second mode exists so anyone cloning the repo can verify it works without
 needing someone else's API key.
+
+`app_boot_test.sh` starts the app on a local port and checks it answers with
+HTTP 200 and the expected page title. It catches start-up failures a syntax
+check cannot see — a missing package, a bad config value, a port that will not
+bind. Set `PORT` and `TIMEOUT` to change the defaults, or `RSCRIPT` if `Rscript`
+is not on your `PATH`.
+
+### Continuous integration
+
+`.github/workflows/ci.yml` runs on every push and pull request to `main`:
+R syntax check, the offline smoke suite, and the app boot test. No credentials
+are stored in the repository, so CI exercises exactly the path a new user takes
+after cloning.
 
 ---
 
