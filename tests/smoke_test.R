@@ -378,7 +378,7 @@ cat("\n11. info_sheet timezone comes from the full data set\n")
 tz_full <- tibble::tibble(
   time_local = as.POSIXct("2026-01-01 10:00:00", tz = "UTC"),
   tempAvg    = 30,
-  tz         = "Asia/Makassar",
+  tz         = "Europe/Amsterdam",
   source     = "observations/all/1day"
 )
 tz_sel <- tz_full[, c("time_local", "tempAvg")]
@@ -387,7 +387,7 @@ tz_got <- inf_tz$value[match("Timezone", inf_tz$field)]
 
 chk("selected subset really has no tz column", !"tz" %in% names(tz_sel))
 chk("info_sheet reports the station timezone, not the fallback",
-    identical(tz_got, "Asia/Makassar"), sprintf("(%s)", tz_got))
+    identical(tz_got, "Europe/Amsterdam"), sprintf("(%s)", tz_got))
 
 # =============================================================================
 cat("\n============================================\n")
