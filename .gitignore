@@ -1,12 +1,26 @@
 # --- Credentials: never commit these -----------------------------------------
 config.json
 
+# --- Public-mode marker -------------------------------------------------------
+# If this were ever committed the whole clone would run in public mode and stop
+# reading config.json. It belongs to the deploy bundle only.
+PUBLIC_MODE
+
 # --- Generated output ---------------------------------------------------------
 *.xlsx
 *.xls
 trend_*.png
 weather_*.xlsx
 report_output/
+
+# --- Build artifact (regenerate with build-public-bundle.sh) -------------------
+shinyapps-public/
+
+# --- Screenshots of a live session --------------------------------------------
+# These are captured against a real station, so the UI shows a real Station ID.
+# Keep them out of the public repo.
+screenshots-public/
+*.png
 
 # --- R ------------------------------------------------------------------------
 .Rhistory

@@ -307,6 +307,11 @@ describe_data <- function(d) {
 #' Provenance (endpoint/resolution) MUST be read from `src_d` = the FULL data
 #' set, not from `d` = the selected columns: `source` is not part of the
 #' selection, so reading it from `d` always yields "unknown".
+#'
+#' The timezone has the same trap, and silently: `tz` is not part of the
+#' selection either, so reading it from `d` falls back to STATION_TZ (UTC) and
+#' mislabels every timestamp in the workbook while still looking plausible.
+#' Row/column counts and the interval DO describe `d`, which is why they use `mi`.
 info_sheet <- function(d, cfg, src_d = d) {
   m  <- describe_data(src_d)
   mi <- describe_data(d)
@@ -324,7 +329,7 @@ info_sheet <- function(d, cfg, src_d = d) {
       as.character(mi$n), as.character(mi$ncol),
       fmt_interval(mi$interval),
       fmt_dt(mi$t_start), fmt_dt(mi$t_end),
-      mi$tz,
+      m$tz,
       switch(cfg$units %||% "m", m = "Metric", e = "Imperial",
              h = "UK Hybrid", cfg$units %||% "m"),
       format(Sys.time(), "%Y-%m-%d %H:%M:%S")),

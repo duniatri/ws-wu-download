@@ -40,11 +40,38 @@ source(file.path(APP_DIR, "R", "params.R"))
 source(file.path(APP_DIR, "R", "api.R"))
 source(file.path(APP_DIR, "R", "plot.R"))
 
+# --- Public deployment mode ---------------------------------------------------
+#
+# When TRUE the app can NEVER read stored credentials. config.json and the WC_*
+# environment variables are both ignored, so every visitor -- the operator
+# included -- must type their own API key and Station ID. This is what makes the
+# build safe to publish on a public host such as shinyapps.io: a misconfigured
+# environment variable cannot silently hand the operator's key to visitors.
+#
+# Two independent triggers, deliberately redundant:
+#   1. a PUBLIC_MODE marker file next to app.R -- what the deploy bundle ships,
+#      so the mode travels with the code instead of depending on host settings.
+#      Deliberately NOT a dotfile: dotfiles are silently dropped by some copy
+#      and archive tools, and a lost marker would quietly disable the guard.
+#   2. the WC_PUBLIC environment variable
+.env_flag <- function(name) {
+  v <- tolower(trimws(Sys.getenv(name, "")))
+  nzchar(v) && !v %in% c("0", "false", "no", "off")
+}
+
+PUBLIC_MODE <- file.exists(file.path(APP_DIR, "PUBLIC_MODE")) ||
+  .env_flag("WC_PUBLIC")
+
 # --- Configuration ------------------------------------------------------------
 
 load_config <- function(dir = APP_DIR) {
   cfg <- list(api_key = "", station_id = "", units = "m",
               numeric_precision = "decimal")
+
+  # Public mode: credentials may only come from the visitor's own input, so the
+  # stored ones are never read in the first place.
+  if (PUBLIC_MODE) return(cfg)
+
   p <- file.path(dir, "config.json")
   if (file.exists(p)) {
     j <- tryCatch(jsonlite::fromJSON(p), error = function(e) NULL)
@@ -100,8 +127,21 @@ ui <- page_navbar(
       sidebar = sidebar(
         width = 350, title = "Fetch settings", open = "always",
 
+        # Shown whenever this build carries no credentials of its own. Opening
+        # the panel and saying why avoids the "why is nothing happening" dead end.
+        if (!nzchar(CFG0$api_key) || !nzchar(CFG0$station_id))
+          div(class = "alert alert-warning py-2 px-3 mb-2 small", role = "alert",
+            tags$b(icon("key"), " Credentials required."),
+            " This app ships with none. Enter your own ",
+            tags$b("Station ID"), " and ", tags$b("API key"), " below, then click ",
+            tags$b("Fetch data"), ".",
+            tags$br(),
+            tags$span(class = "text-muted",
+              "They are used for your own session only and are never stored.")
+          ),
+
         accordion(
-          open = FALSE,
+          open = !nzchar(CFG0$api_key) || !nzchar(CFG0$station_id),
           accordion_panel("Credentials", icon = icon("key"),
             textInput("station_id", "Station ID", value = CFG0$station_id),
             passwordInput("api_key", "API key", value = CFG0$api_key),
@@ -110,9 +150,15 @@ ui <- page_navbar(
                           "Imperial (\u00b0F, mph, in)"     = "e",
                           "UK Hybrid"                      = "h"),
               selected = CFG0$units),
-            helpText("Initial values are read from config.json. They can be",
-                     "overridden with the WC_API_KEY / WC_STATION_ID",
-                     "environment variables.")
+            helpText(if (PUBLIC_MODE) {
+              tagList("Your key reaches this app's server only so it can call the",
+                      "weather API on your behalf. It is held in memory for your",
+                      "session and discarded when the browser tab closes.")
+            } else {
+              tagList("Initial values are read from config.json. They can be",
+                      "overridden with the WC_API_KEY / WC_STATION_ID",
+                      "environment variables.")
+            })
           )
         ),
 
@@ -332,10 +378,14 @@ server <- function(input, output, session) {
     cfg <- current_cfg()
 
     if (!nzchar(cfg$station_id)) {
-      showNotification("Station ID is empty.", type = "error"); return()
+      showNotification("Enter your Station ID in the Credentials panel first.",
+                       type = "error", duration = 6)
+      return()
     }
     if (!nzchar(cfg$api_key)) {
-      showNotification("API key is empty.", type = "error"); return()
+      showNotification("Enter your API key in the Credentials panel first.",
+                       type = "error", duration = 6)
+      return()
     }
 
     src <- input$source
@@ -386,12 +436,17 @@ server <- function(input, output, session) {
   observeEvent(input$btn_status, {
     cfg <- current_cfg()
     if (!nzchar(cfg$station_id) || !nzchar(cfg$api_key)) {
-      showNotification("Enter the Station ID and API key first.", type = "error"); return()
+      showNotification("Enter your Station ID and API key first.",
+                       type = "error", duration = 6)
+      return()
     }
 
     res <- withProgress(message = "Contacting the station\u2026", value = 0.5, {
       wc_current(cfg)
     })
+
+    # Scrubbed before display, for the same reason as the request log.
+    msg <- redact_key(res$message, cfg$api_key)
 
     online <- isTRUE(res$ok) && res$code == "ok"
     df <- if (online) flatten_observations(res$observations, "status-check") else NULL
@@ -401,13 +456,13 @@ server <- function(input, output, session) {
         tags$p(class = "mb-2", tags$b("Status:"), " \U0001F7E2 ONLINE"),
         tags$p(class = "mb-1", "Last reading: ",
                tags$b(format(df$time_local[1], "%d %b %Y %H:%M:%S"))),
-        tags$p(class = "mb-0 text-muted small", res$message)
+        tags$p(class = "mb-0 text-muted small", msg)
       )
     } else {
       tagList(
         tags$p(class = "mb-2", tags$b("Status:"),
                " \U0001F534 OFFLINE / no data"),
-        tags$p(class = "mb-0", res$message)
+        tags$p(class = "mb-0", msg)
       )
     }
 

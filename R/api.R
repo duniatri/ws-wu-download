@@ -13,6 +13,27 @@
 
 WC_BASE <- "https://api.weather.com"
 
+# --- Secret redaction ---------------------------------------------------------
+
+#' Mask an API key wherever it appears in a message.
+#'
+#' The key travels in the query string, so a low-level transport error can echo
+#' the full request URL back. On a publicly reachable deployment that message is
+#' rendered in the UI and stored in the request log, so every message leaving
+#' the API layer is scrubbed before it can be displayed.
+#'
+#' Two passes: the known key value, plus a generic `apiKey=...` pattern in case
+#' the message carries a re-encoded or differently-cased copy of it.
+redact_key <- function(txt, key = NULL) {
+  if (is.null(txt) || !length(txt)) return(txt)
+  txt <- as.character(txt)
+  txt <- gsub("(apiKey=)[^&\"'[:space:]]+", "\\1***", txt)
+  if (is.null(key) || !length(key)) return(txt)
+  key <- as.character(key)[1]
+  if (is.na(key) || !nzchar(key)) return(txt)
+  gsub(key, "***", txt, fixed = TRUE)
+}
+
 # --- HTTP layer ---------------------------------------------------------------
 
 #' Call a single PWS endpoint. Always returns a structured list and never
@@ -261,7 +282,9 @@ fetch_weather <- function(cfg, source, start = NULL, end = NULL,
       source   = label,
       http     = ifelse(is.na(res$status), "\u2014", as.character(res$status)),
       status   = if (res$ok) "OK" else "FAILED",
-      message  = res$message,
+      # Scrubbed before it can reach the UI: a transport error may echo the
+      # request URL, which carries the API key in its query string.
+      message  = redact_key(res$message, cfg$api_key),
       n        = length(res$observations),
       stringsAsFactors = FALSE
     )

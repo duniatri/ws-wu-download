@@ -342,6 +342,53 @@ if (has_creds) {
   skip_sec("hourly interval comparison needs credentials")
 }
 
+# --- 10. Credential safety ----------------------------------------------------
+# redact_key() is the only thing between a transport error (which can echo the
+# request URL, and the key travels in its query string) and the browser. It must
+# never let the key through, and never damage the rest of the message.
+cat("\n10. Credential safety (redact_key)\n")
+
+k_fake <- "abcdef0123456789abcdef0123456789"
+
+chk("raw key value is masked",
+    !grepl(k_fake, redact_key(paste0("GET /v2/pws?apiKey=", k_fake), k_fake),
+           fixed = TRUE))
+chk("generic apiKey= masked even when the key differs",
+    !grepl("SOMEOTHERKEY",
+           redact_key("https://api.weather.com/x?apiKey=SOMEOTHERKEY&y=1", k_fake),
+           fixed = TRUE))
+chk("rest of the message survives",
+    grepl("Failed to connect",
+          redact_key(paste0("Failed to connect: apiKey=", k_fake), k_fake),
+          fixed = TRUE))
+chk("NULL input is safe",            is.null(redact_key(NULL, k_fake)))
+chk("text without a key is untouched",
+    identical(redact_key("nothing secret here", k_fake), "nothing secret here"))
+chk("missing key argument is safe",
+    identical(redact_key("a?apiKey=b"), "a?apiKey=***"))
+chk("empty key still applies the generic rule",
+    identical(redact_key("a?apiKey=b", ""), "a?apiKey=***"))
+
+# --- 11. info_sheet timezone --------------------------------------------------
+# Same bug class as the `source` column, but silent: `tz` is not part of the
+# user's column selection, so reading it from the selected subset falls back to
+# UTC and mislabels every timestamp in the workbook. Runs without credentials.
+cat("\n11. info_sheet timezone comes from the full data set\n")
+
+tz_full <- tibble::tibble(
+  time_local = as.POSIXct("2026-01-01 10:00:00", tz = "UTC"),
+  tempAvg    = 30,
+  tz         = "Asia/Makassar",
+  source     = "observations/all/1day"
+)
+tz_sel <- tz_full[, c("time_local", "tempAvg")]
+inf_tz <- info_sheet(tz_sel, list(station_id = "X", units = "m"), tz_full)
+tz_got <- inf_tz$value[match("Timezone", inf_tz$field)]
+
+chk("selected subset really has no tz column", !"tz" %in% names(tz_sel))
+chk("info_sheet reports the station timezone, not the fallback",
+    identical(tz_got, "Asia/Makassar"), sprintf("(%s)", tz_got))
+
 # =============================================================================
 cat("\n============================================\n")
 cat(sprintf("  RESULT: %d PASS, %d FAIL, %d SKIP\n", pass, fail, skip))
